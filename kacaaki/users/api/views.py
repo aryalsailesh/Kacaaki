@@ -15,12 +15,15 @@ from .serializers import  (
     PasswordResetSerializer,
     UserEmailSerializer,
     LogoutSerializer,
+    VideoSerializer
 
 )
 from rest_framework.views import  APIView
 from rest_framework.parsers import  JSONParser
 from rest_framework.decorators import api_view,permission_classes
 from rest_framework import status
+
+
 from ..models import  (
     User,
     NepaliStudent,
@@ -29,6 +32,11 @@ from ..models import  (
     Token,
    
 )
+from ..pagination import CustomPagination
+from ..utils import verify_token,user_password_reset_email,check_password,verify_reset_token
+from ..tasks import generate_otp
+
+
 from rest_framework import viewsets
 from rest_framework import  generics
 from django.utils.translation import gettext_lazy as _
@@ -39,13 +47,21 @@ from rest_framework import  permissions
 from django.contrib.auth.hashers import make_password
 from django.http import HttpResponseRedirect, Http404
 from django.contrib.auth import login
-from ..utils import verify_token,user_password_reset_email,check_password,verify_reset_token
 import redis
 import pickle
 import django_filters 
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from rest_framework_simplejwt.tokens import RefreshToken,OutstandingToken,BlacklistedToken
+from rest_framework.throttling import UserRateThrottle,AnonRateThrottle
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.generics import ListAPIView
+
+
+class CustomUserRateThrottle(UserRateThrottle):
+    rate = '10/min'
+
+
 # from rest_framework.authtoken.models import Token
 
 r = redis.Redis(host=settings.REDIS_HOST,port=settings.REDIS_PORT,db=0)
@@ -175,7 +191,30 @@ class UserFilterView(generics.ListAPIView):
 
 
 
-
+class UserListView(APIView):
+    # permission_classes = (permissions.IsAdminUser,)
+    def get(self,request):
+        queryset = User.objects.all()
+        paginator = CustomPagination()
+        result_page = paginator.paginate_queryset(queryset,request)
+        if result_page is not None:
+            serializer = UserSerializer(result_page,many=True)
+            return paginator.get_paginated_response(serializer.data)
+            # context = {
+            #     "status":200,
+            #     "message":"All User got successfully",
+            #     "data":data
+            # }
+            # return Response(context,status=200)
+        serializer = UserSerializer(queryset,many=True)
+        context = {
+            "status":200,
+            "message":"All User got successfully",
+            "data":serializer.data
+        }
+        return Response(context,status=200)
+ 
+    
 
 
 
@@ -189,6 +228,7 @@ class UserFilterView(generics.ListAPIView):
 #Nepali Student View
 class NepaliStudentView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
+    throttle_classes = [CustomUserRateThrottle]
     def get(self,request):
         if r.exists('nepali_student'):
             data = r.get('nepali_student')
@@ -841,3 +881,41 @@ class PasswordResetView(APIView):
                 "message":"Invalid token"
             }
             return Response(context, status=status.HTTP_400_BAD_REQUEST) 
+        
+        
+        
+
+
+class VideoView(APIView):
+    permission_classes = [permissions.AllowAny]
+    def post(self,request):
+        serializer = VideoSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            context = {
+                'status':201,
+                'message':'Video uploaded successfully',
+                'data':serializer.data
+            }
+            return Response(context,status=201)
+        else:
+            context = {
+                'status':400,
+                'message':'failed',
+                'error':serializer.errors
+            }
+            return Response(context,status=400)
+        
+
+
+
+class OtpRequestView(APIView):
+    permission_classes = [permissions.AllowAny]
+    def post(self,request):
+        user = User.objects.first()
+        generate_otp.delay()
+        context = {
+            'status':200,
+            'message':'Otp sent successfully'
+        }
+        return Response(context,status=200)

@@ -22,6 +22,9 @@ from .views import (
     DanceStudentFilterView,
     TeacherFilterView,
     UserFilterView,
+    UserListView,
+    VideoView,
+    OtpRequestView
 
 
     
@@ -53,6 +56,9 @@ urlpatterns = [
     path('dance-student/filter/',DanceStudentFilterView.as_view(),name='dance_student_filter'),
     path('teacher/filter/',TeacherFilterView.as_view(),name='teacher_filter'),
     path('user/filter/',UserFilterView.as_view(),name='user_filter'),
+    path('user/list/view/',UserListView.as_view(),name='user_list_view'),
+    path('upload/video/',VideoView.as_view(),name='video_upload'),
+    path('otp/request/',OtpRequestView.as_view(),name='otp_request'),
 
 
     
